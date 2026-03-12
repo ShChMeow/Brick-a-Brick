@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>砖了个砖</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { min-height: 100vh; display: flex; justify-content: center; align-items: center; background: #1a1a2e; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+#game-container { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#header { background: linear-gradient(135deg, #16213e, #0f3460); border-radius: 12px; padding: 10px 32px; text-align: center; color: #e0e0e0; min-width: 440px; position: relative; }
+#header h1 { font-size: 20px; color: #e94560; margin-bottom: 2px; }
+#header .info { font-size: 13px; color: #a0a0c0; }
+#hint-btn { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: 2px solid #e9a045; border-radius: 50%; width: 34px; height: 34px; font-size: 18px; cursor: pointer; color: #e9a045; transition: all .2s; }
+#hint-btn:hover { background: #e9a045; color: #1a1a2e; }
+#board-wrapper { position: relative; }
+#board { display: grid; gap: 2px; background: #16213e; border-radius: 8px; padding: 4px; box-shadow: 0 0 30px rgba(233,69,96,.15); }
+.cell { width: 40px; height: 40px; background: #0f3460; border-radius: 3px; }
+.brick { width: 36px; height: 36px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: grab; user-select: none; position: absolute; z-index: 2; transition: none; pointer-events: auto; }
+.brick:hover { filter: brightness(1.2); }
+.brick.selected { box-shadow: 0 0 10px 3px rgba(255,255,255,.6); z-index: 3; }
+.brick.candidate { animation: candidatePulse .8s ease-in-out infinite; z-index: 3; }
+@keyframes candidatePulse { 0%,100% { box-shadow: 0 0 6px 2px #2ecc71; filter: brightness(1.3); } 50% { box-shadow: 0 0 16px 5px #2ecc71; filter: brightness(1.6); } }
+.brick.hint { animation: hintPulse .7s ease-in-out infinite; z-index: 3; }
+@keyframes hintPulse { 0%,100% { box-shadow: 0 0 6px 2px #e9a045; } 50% { box-shadow: 0 0 18px 6px #e9a045; } }
+.brick.sliding { transition: left .2s ease-out, top .2s ease-out; }
+.brick.removing { animation: pop .3s ease-out forwards; pointer-events: none; }
+@keyframes pop { to { transform: scale(0) rotate(30deg); opacity: 0; } }
+.connect-line { position: absolute; background: rgba(233,69,96,.5); z-index: 1; border-radius: 3px; animation: lineFade .3s ease-out forwards; }
+@keyframes lineFade { 0% { opacity: 1; } 100% { opacity: 0; } }
+#message { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(15,52,96,.95); color: #e94560; font-size: 26px; padding: 28px 44px; border-radius: 16px; border: 2px solid #e94560; display: none; z-index: 100; text-align: center; }
+#message button { margin-top: 14px; padding: 7px 22px; background: #e94560; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
+#controls { display: flex; gap: 10px; }
+#controls button { padding: 5px 16px; background: #0f3460; color: #a0a0c0; border: 1px solid #a0a0c0; border-radius: 6px; cursor: pointer; font-size: 12px; }
+#controls button:hover { background: #e94560; color: #fff; border-color: #e94560; }
+#controls button:disabled { opacity: .4; cursor: not-allowed; background: #0f3460; color: #a0a0c0; border-color: #a0a0c0; }
+/* 图标库弹窗 */
+#icon-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 200; justify-content: center; align-items: center; }
+#icon-modal.open { display: flex; }
+#icon-inner { background: #16213e; border-radius: 14px; padding: 24px 32px; color: #e0e0e0; text-align: center; min-width: 340px; max-width: 480px; max-height: 80vh; overflow-y: auto; }
+#icon-inner h3 { color: #e94560; margin-bottom: 8px; }
+.icon-desc { font-size: 12px; color: #a0a0c0; margin-bottom: 12px; }
+.icon-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.icon-item { width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 22px; cursor: pointer; border: 2px solid transparent; transition: all .2s; position: relative; }
+.icon-item.active { background: #0f3460; border-color: #2ecc71; }
+.icon-item.disabled { background: #1a1a2e; border-color: #555; opacity: .4; }
+.icon-item.disabled::after { content: '✕'; position: absolute; font-size: 12px; color: #e94560; bottom: 0; right: 2px; }
+/* AI解题面板 — 居中弹窗 */
+#ai-panel { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 150; display: none; justify-content: center; align-items: center; }
+#ai-panel.open { display: flex; }
+#ai-panel-inner { background: #16213e; border-radius: 14px; border: 2px solid #e94560; padding: 16px 24px; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; min-width: 340px; max-width: 480px; max-height: 80vh; overflow-y: auto; }
+#ai-panel-inner h3 { color: #e94560; margin-bottom: 8px; text-align: center; }
+#ai-status { font-size: 13px; color: #a0a0c0; text-align: center; margin-bottom: 10px; min-height: 20px; }
+#ai-board-mini { margin: 0 auto 10px; position: relative; }
+#ai-board-mini .mini-cell { background: #0f3460; border-radius: 2px; }
+#ai-board-mini .mini-brick { position: absolute; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+#ai-steps { overflow-y: auto; font-size: 12px; margin: 8px 0; max-height: 120px; width: 100%; }
+#ai-steps .step-item { padding: 3px 8px; border-radius: 4px; margin-bottom: 2px; cursor: pointer; }
+#ai-steps .step-item:hover { background: #0f3460; }
+#ai-steps .step-item.current { background: #e94560; color: #fff; }
+#ai-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+#ai-controls button { padding: 5px 14px; background: #0f3460; color: #a0a0c0; border: 1px solid #a0a0c0; border-radius: 6px; cursor: pointer; font-size: 12px; }
+#ai-controls button:hover { background: #e94560; color: #fff; border-color: #e94560; }
+#ai-controls button:disabled { opacity: .4; cursor: not-allowed; }
+#custom-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 200; justify-content: center; align-items: center; }
+#custom-modal.open { display: flex; }
+#custom-inner { background: #16213e; border-radius: 14px; padding: 24px 32px; color: #e0e0e0; text-align: center; min-width: 300px; }
+#custom-inner h3 { color: #e94560; margin-bottom: 8px; }
+.custom-desc { font-size: 12px; color: #a0a0c0; margin-bottom: 12px; }
+#custom-inner label { font-size: 14px; }
+#custom-inner input { width: 60px; padding: 4px; border-radius: 4px; border: 1px solid #a0a0c0; background: #0f3460; color: #fff; text-align: center; font-size: 14px; }
+.custom-preview { margin: 12px 0; font-size: 20px; line-height: 1.6; word-break: break-all; }
+.custom-btns { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+.custom-btns button { padding: 6px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; background: #e94560; color: #fff; }
+.custom-btns .cancel { background: #555; }
+/* 图片识别弹窗 */
+#recognize-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 200; justify-content: center; align-items: center; }
+#recognize-modal.open { display: flex; }
+#recognize-inner { background: #16213e; border-radius: 14px; padding: 24px 32px; color: #e0e0e0; text-align: center; min-width: 340px; max-width: 500px; max-height: 85vh; overflow-y: auto; }
+#recognize-inner h3 { color: #f39c12; margin-bottom: 8px; }
+.recognize-desc { font-size: 12px; color: #a0a0c0; margin-bottom: 12px; }
+#recognize-status { font-size: 13px; color: #a0a0c0; margin-bottom: 12px; min-height: 20px; }
+.recognize-upload-btn { display: inline-block; padding: 8px 20px; background: #f39c12; color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; transition: all .2s; }
+.recognize-upload-btn:hover { background: #e67e22; }
+#recognize-confirm { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+#recognize-confirm button { padding: 6px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; background: #2ecc71; color: #fff; }
+#recognize-confirm .cancel { background: #555; }
+/* AI加载动画 */
+.ai-loading { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ai-spinner { width: 32px; height: 32px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: aiSpin 1s linear infinite; }
+@keyframes aiSpin { to { transform: rotate(360deg); } }
+.ai-progress-bar { width: 200px; height: 8px; background: #0f3460; border-radius: 4px; overflow: hidden; }
+.ai-progress-fill { height: 100%; background: linear-gradient(90deg, #e94560, #f39c12); border-radius: 4px; width: 0; transition: width .2s; }
+.ai-progress-text { font-size: 12px; color: #a0a0c0; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="header">
+    <h1>🧱 砖了个砖</h1>
+    <div class="info">关卡 <span id="level">1</span> · 难度 <span id="difficulty">初级</span></div>
+    <button id="icon-lib-btn" title="图标库：管理砖块图标" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);background:none;border:2px solid #3498db;border-radius:50%;width:34px;height:34px;font-size:18px;cursor:pointer;color:#3498db;transition:all .2s;">📦</button>
+    <button id="recognize-btn" title="识别：上传砖块图片转化为关卡" style="position:absolute;left:56px;top:50%;transform:translateY(-50%);background:none;border:2px solid #f39c12;border-radius:50%;width:34px;height:34px;font-size:18px;cursor:pointer;color:#f39c12;transition:all .2s;">📷</button>
+    <button id="ai-solve-btn" title="AI解题" style="position:absolute;right:54px;top:50%;transform:translateY(-50%);background:none;border:2px solid #2ecc71;border-radius:50%;width:34px;height:34px;font-size:18px;cursor:pointer;color:#2ecc71;transition:all .2s;">🤖</button>
+    <button id="hint-btn" title="提示：高亮可消除的一对砖块">💡</button>
+  </div>
+  <div id="board-wrapper">
+    <div id="board"></div>
+  </div>
+  <div id="controls">
+    <button id="prev-btn" onclick="prevLevel()">⏮ 上一关</button>
+    <button onclick="restartLevel()">🔄 重新开始</button>
+    <button onclick="nextLevel()">⏭ 下一关</button>
+    <button onclick="openCustom()">🎨 定制关卡</button>
+    <button id="undo-btn" onclick="undo()" disabled>↩ 撤回</button>
+    <button id="redo-btn" onclick="redo()" disabled>↪ 取消撤回</button>
+  </div>
+  <!-- 定制关卡弹窗 -->
+  <div id="custom-modal">
+    <div id="custom-inner">
+      <h3>🎨 定制关卡</h3>
+      <p class="custom-desc">砖块类别数越多难度越高（2~70）</p>
+      <label>砖块类别数：<input id="custom-types" type="number" min="2" max="70" value="10"></label>
+      <div class="custom-preview" id="custom-preview"></div>
+      <div class="custom-btns">
+        <button onclick="startCustom()">开始游戏</button>
+        <button onclick="closeCustom()" class="cancel">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="message"><div id="msg-text"></div><button onclick="closeMsg()">确定</button></div>
+<!-- 图标库弹窗 -->
+<div id="icon-modal">
+  <div id="icon-inner">
+    <h3>📦 图标库</h3>
+    <p class="icon-desc">点击图标可禁用/启用，禁用的图标不会出现在游戏中</p>
+    <div class="icon-grid" id="icon-grid"></div>
+    <div class="custom-btns" style="margin-top:14px">
+      <button onclick="closeIconModal()">确定</button>
+    </div>
+  </div>
+</div>
+<!-- AI解题面板 -->
+<div id="ai-panel">
+  <div id="ai-panel-inner">
+    <h3>🤖 AI 解题</h3>
+    <div id="ai-status">点击「开始解题」观看AI自动通关</div>
+    <div id="ai-board-mini"></div>
+    <div id="ai-steps"></div>
+    <div id="ai-controls">
+      <button id="ai-start-btn" onclick="aiStart()">▶ 开始解题</button>
+      <button id="ai-prev-btn" onclick="aiStepPrev()" disabled>⏮ 上一步</button>
+      <button id="ai-next-btn" onclick="aiStepNext()" disabled>⏭ 下一步</button>
+      <button onclick="aiClose()">✕ 关闭</button>
+    </div>
+  </div>
+</div>
+<!-- 图片识别弹窗 -->
+<div id="recognize-modal">
+  <div id="recognize-inner">
+    <h3>📷 砖块图片识别</h3>
+    <p class="recognize-desc">上传一张14×10的砖块游戏截图，自动识别砖块布局并转化为可玩关卡</p>
+    <div id="recognize-status">请上传一张14×10的砖块游戏截图</div>
+    <label class="recognize-upload-btn">
+      📁 选择图片
+      <input type="file" id="recognize-file" accept="image/*" style="display:none">
+    </label>
+    <div id="recognize-preview"></div>
+    <div id="recognize-confirm" style="display:none">
+      <button onclick="confirmRecognize()">✅ 确认转化</button>
+      <button onclick="closeRecognize()" class="cancel">取消</button>
+    </div>
+    <div class="custom-btns" style="margin-top:10px">
+      <button onclick="closeRecognize()" class="cancel">关闭</button>
+    </div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
