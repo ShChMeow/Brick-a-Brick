@@ -7,11 +7,26 @@
 const COLS = 10;
 const ROWS = 14;
 const TOTAL = COLS * ROWS; // 140
-const CELL = 40;
-const GAP = 2;
-const PAD = 4;
-const BRICK = 36;
-const STEP = CELL + GAP; // 一格的像素距离
+// 动态尺寸 — 根据屏幕宽度自适应
+let CELL = 40;
+let GAP = 2;
+let PAD = 4;
+let BRICK = 36;
+let STEP = CELL + GAP;
+
+function calcSizes() {
+  // 可用宽度：视口宽度减去左右安全边距
+  const vw = Math.min(window.innerWidth, document.documentElement.clientWidth);
+  const maxBoardW = vw - 16; // 左右各留 8px
+  // 棋盘宽度 = PAD*2 + COLS*CELL + (COLS-1)*GAP，反推 CELL
+  // 先用默认 GAP=2, PAD=4 算出 CELL 上限
+  const idealCell = Math.floor((maxBoardW - 8 - (COLS - 1) * 2) / COLS);
+  CELL = Math.min(40, Math.max(20, idealCell)); // 限制在 20~40px
+  GAP = CELL >= 30 ? 2 : 1;
+  PAD = CELL >= 30 ? 4 : 2;
+  BRICK = CELL - 4;
+  STEP = CELL + GAP;
+}
 
 const ICONS = [
   '🔴','🔵','🟢','🟡','🟣','🟠','⭐','💎','🌙','❤️',
@@ -182,8 +197,11 @@ function updateUndoRedoBtns() {
 
 // ===== 渲染棋盘 =====
 function render() {
+  calcSizes();
   board.style.gridTemplateColumns = `repeat(${COLS}, ${CELL}px)`;
   board.style.gridTemplateRows = `repeat(${ROWS}, ${CELL}px)`;
+  board.style.gap = GAP + 'px';
+  board.style.padding = PAD + 'px';
   board.innerHTML = '';
   brickEls = {};
 
@@ -199,6 +217,8 @@ function render() {
     for (let c = 0; c < COLS; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
+      cell.style.width = CELL + 'px';
+      cell.style.height = CELL + 'px';
       board.appendChild(cell);
     }
   }
@@ -214,6 +234,7 @@ function render() {
       el.style.top = cellY(r) + 'px';
       el.style.width = BRICK + 'px';
       el.style.height = BRICK + 'px';
+      el.style.fontSize = Math.max(10, BRICK - 16) + 'px';
       // 切片模式：用切片图片显示；普通模式：用 emoji + 颜色
       if (sliceMode && sliceImageMap[type]) {
         el.style.background = 'none';
@@ -1510,5 +1531,13 @@ function confirmRecognize() {
   render();
 }
 
+// ===== 窗口自适应 =====
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => render(), 150);
+});
+
 // ===== 启动游戏 =====
+calcSizes();
 initLevel();
